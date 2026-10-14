@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Flying Japan — 1903 Wright Flyer</title>
+  <meta name="description" content="Fly the 1903 Wright Flyer through torii gates in a procedurally generated Japanese forest. Built with Three.js, no external assets." />
+  <style>
+    :root {
+      --ink: #f4efe4;
+      --paper: rgba(20, 22, 28, 0.55);
+      --vermilion: #d8452a;
+      --gold: #ffd27a;
+      font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", "Noto Serif JP", Georgia, "Times New Roman", serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0f1218; color: var(--ink); }
+    #game { display: block; width: 100vw; height: 100vh; }
+    .panel { position: absolute; background: var(--paper); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 10px 14px; pointer-events: none; }
+    #hud { left: 16px; bottom: 16px; min-width: 190px; font-size: 14px; line-height: 1.5; }
+    #hud .big { font-size: 30px; line-height: 1; font-weight: 600; letter-spacing: 0.5px; }
+    #hud .unit { font-size: 12px; opacity: 0.7; margin-left: 4px; }
+    #hud .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    #hud .bar { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+    #hud .bar > div { height: 100%; width: 0; background: var(--gold); transition: width 0.1s linear; }
+    #hud-stall { color: var(--vermilion); font-weight: 700; letter-spacing: 2px; transition: opacity 0.2s; }
+    #top { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 15px; min-width: 240px; }
+    #top .label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.65; }
+    #top .vals { display: flex; justify-content: center; gap: 26px; }
+    #top .vals b { font-size: 22px; font-weight: 600; }
+    #hud-best { font-size: 11px; opacity: 0.7; }
+    #message-wrap { position: absolute; top: 24%; left: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+    #message-wrap.show { opacity: 1; }
+    #hud-message { font-size: clamp(28px, 5vw, 56px); font-weight: 600; text-shadow: 0 2px 18px rgba(0,0,0,0.6); letter-spacing: 1px; }
+    #hud-sub { font-size: clamp(14px, 1.8vw, 20px); opacity: 0.9; text-shadow: 0 1px 8px rgba(0,0,0,0.7); margin-top: 6px; }
+    #compass { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; transition: opacity 0.3s; }
+    #compass-arrow { width: 46px; height: 46px; transition: transform 0.1s linear; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6)); }
+    #compass-dist { font-size: 12px; opacity: 0.85; text-shadow: 0 1px 4px #000; }
+    #right { right: 16px; bottom: 16px; text-align: right; font-size: 12px; opacity: 0.8; line-height: 1.7; }
+    #help { right: 16px; top: 16px; font-size: 13px; line-height: 1.6; max-width: 300px; pointer-events: none; }
+    #help h3 { margin: 0 0 6px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.7; }
+    #help table { border-collapse: collapse; }
+    #help td { padding: 1px 8px 1px 0; vertical-align: top; }
+    #help td:first-child { white-space: nowrap; color: var(--gold); }
+    kbd { font-family: inherit; }
+    .hidden { display: none !important; }
+    #intro { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(10,12,18,0.25), rgba(10,12,18,0.75)); pointer-events: none; }
+    #intro .card { text-align: center; max-width: 720px; padding: 32px 40px; }
+    #intro h1 { font-size: clamp(36px, 7vw, 76px); margin: 0; font-weight: 600; letter-spacing: 2px; text-shadow: 0 4px 30px rgba(0,0,0,0.7); }
+    #intro h1 span { display: block; font-size: 0.42em; letter-spacing: 8px; color: var(--gold); margin-bottom: 6px; }
+    #intro p { font-size: clamp(14px, 1.9vw, 18px); line-height: 1.6; opacity: 0.92; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
+    #intro .start { margin-top: 18px; font-size: clamp(16px, 2.2vw, 22px); color: var(--gold); animation: pulse 1.6s ease-in-out infinite; }
+    #stats { font-size: 12px; opacity: 0.65; margin-top: 14px; }
+    @keyframes pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+    #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+    #flash.go { animation: flash 0.5s ease-out; }
+    @keyframes flash { 0% { opacity: 0.8; } 100% { opacity: 0; } }
+    #pause { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 42px; background: rgba(0,0,0,0.4); pointer-events: none; }
+    #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #0f1218; font-size: 20px; letter-spacing: 3px; z-index: 10; }
+    #file-warning { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: #0f1218; z-index: 20; padding: 24px; text-align: center; line-height: 1.6; }
+    #file-warning code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; }
+    /* Touch controls */
+    #touch { display: none; position: absolute; inset: 0; pointer-events: none; }
+    body.touch #touch { display: block; }
+    body.touch #help, body.touch #right { display: none; }
+    #stick { position: absolute; left: 24px; bottom: 120px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25); pointer-events: auto; touch-action: none; }
+    #stick-knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(255,210,122,0.6); }
+    .tbtn { position: absolute; right: 24px; width: 74px; height: 74px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: var(--ink); font-size: 26px; display: flex; align-items: center; justify-content: center; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+    #btn-up { bottom: 200px; }
+    #btn-down { bottom: 110px; }
+    #btn-cam { bottom: 20px; font-size: 16px; }
+    body.touch #hud { bottom: auto; top: 70px; left: 12px; font-size: 12px; min-width: 150px; }
+    body.touch #hud .big { font-size: 22px; }
+    body.touch #top { font-size: 12px; min-width: 180px; padding: 6px 10px; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="loading">BUILDING THE VALLEY…</div>
+  <div id="file-warning">
+    <div>
+      <h2>Serve this folder over HTTP</h2>
+      <p>Browsers block ES modules on <code>file://</code>. From the project folder run<br /><code>python3 -m http.server 8000</code> and open <code>http://localhost:8000/</code>.</p>
+    </div>
+  </div>
+
+  <div id="intro" class="hidden">
+    <div class="card">
+      <h1><span>1903 · WRIGHT FLYER</span>Flying Japan</h1>
+      <p>Fly the first powered aeroplane through a valley of cedar, pine and maple. Twelve giant torii gates mark the course; pass under each one in order.<br />The Flyer launches from its 60-foot rail into a steady headwind, just as it did at Kill Devil Hills.</p>
+      <div class="start">Press any key or tap to take off</div>
+      <div id="stats"></div>
+    </div>
+  </div>
+
+  <div id="top" class="panel">
+    <div class="vals">
+      <div><div class="label">Gates</div><b id="hud-gates">0 / 12</b></div>
+      <div><div class="label">Time</div><b id="hud-timer">0:00.0</b></div>
+    </div>
+    <div id="hud-best"></div>
+  </div>
+
+  <div id="message-wrap"><div id="hud-message"></div><div id="hud-sub"></div></div>
+
+  <div id="hud" class="panel">
+    <div class="row"><span><span class="big" id="hud-speed">0</span><span class="unit">km/h</span></span><span class="unit" id="hud-speed-mph">0 mph</span></div>
+    <div class="row"><span>Altitude</span><span><b id="hud-alt">0</b><span class="unit">m</span></span></div>
+    <div class="row"><span>Heading</span><span id="hud-heading">000° N</span></div>
+    <div class="row"><span>Throttle</span><span id="hud-throttle">0%</span></div>
+    <div class="bar"><div id="hud-throttle-bar"></div></div>
+    <div id="hud-stall" style="opacity:0">STALL</div>
+  </div>
+
+  <div id="compass" style="opacity:0">
+    <svg id="compass-arrow" viewBox="0 0 48 48"><path d="M24 4 L36 40 L24 32 L12 40 Z" fill="#ffd27a" stroke="#1a1a1a" stroke-width="1.5"/></svg>
+    <div id="compass-dist"></div>
+  </div>
+
+  <div id="right" class="panel">
+    <div id="hud-camera">chase camera (C)</div>
+    <div id="hud-mute">sound on (M)</div>
+    <div>help (H)</div>
+  </div>
+
+  <div id="help" class="panel">
+    <h3>Controls</h3>
+    <table>
+      <tr><td><kbd>Shift</kbd> / <kbd>Ctrl</kbd></td><td>throttle up / down (also Z / X)</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd> or <kbd>W</kbd> <kbd>S</kbd></td><td>elevator: pull up / push down</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd></td><td>wing warping: bank left / right</td></tr>
+      <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>rudder</td></tr>
+      <tr><td><kbd>C</kbd></td><td>camera · <kbd>R</kbd> reset · <kbd>P</kbd> pause</td></tr>
+      <tr><td><kbd>I</kbd></td><td>invert pitch · <kbd>M</kbd> mute · <kbd>H</kbd> hide this</td></tr>
+    </table>
+    <p style="margin:8px 0 0;opacity:0.75">The Flyer flies at 50–75 km/h. Keep the nose gentle: the canard stalls above 15°. Land on the skids, level, with the throttle closed.</p>
+  </div>
+
+  <div id="touch">
+    <div id="stick"><div id="stick-knob"></div></div>
+    <div class="tbtn" id="btn-up">▲</div>
+    <div class="tbtn" id="btn-down">▼</div>
+    <div class="tbtn" id="btn-cam">cam</div>
+  </div>
+
+  <div id="pause" class="hidden">PAUSED — press P</div>
+  <div id="flash"></div>
+
+  <script>
+    if (location.protocol === 'file:') {
+      document.getElementById('file-warning').style.display = 'flex';
+      document.getElementById('loading').remove();
+    }
+  </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
